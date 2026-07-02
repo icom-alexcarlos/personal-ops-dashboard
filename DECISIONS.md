@@ -49,9 +49,11 @@ project in the browser preview:
   create_calendar_event)
 - Notifications feed with undo
 
+Since verified (2026-07-02): Google Calendar OAuth consent tested end-to-end with
+real Google login — tokens stored, 5 events synced, Today screen reflects state.
+(Root cause of initial failure: app_settings migration hadn't been run in Supabase.)
+All commits pushed to GitHub.
+
 Not yet done (per SCOPE.md's own kickoff rules — use it for 3 days before Phase 2):
-- Real end-to-end test of Google Calendar OAuth consent (needs your real Google
-  login, verified only that the redirect URL is correctly formed)
-- Push to GitHub (local commits only so far, ahead of origin/main)
 - Upgrade Supabase to Pro before daily reliance
 - Pick real hosting and deploy (not needed for local use)
