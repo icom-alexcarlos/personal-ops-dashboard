@@ -111,7 +111,9 @@ export default async function TodayPage() {
           ))}
           {events?.length === 0 && (
             <p className="text-sm text-zinc-400">
-              No events synced yet. Connect Google Calendar to see them here.
+              {calendarConnected
+                ? "No events today."
+                : "No events synced yet. Connect Google Calendar to see them here."}
             </p>
           )}
         </div>

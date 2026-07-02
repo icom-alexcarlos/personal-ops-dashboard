@@ -31,9 +31,10 @@ export async function saveTokens(tokens: {
     merged.refresh_token = existing.value.refresh_token;
   }
 
-  await supabase
+  const { error } = await supabase
     .from("app_settings")
     .upsert({ key: SETTINGS_KEY, value: merged, updated_at: new Date().toISOString() });
+  if (error) throw new Error(`Failed to save Google tokens: ${error.message}`);
 }
 
 export async function getAuthenticatedClient() {
