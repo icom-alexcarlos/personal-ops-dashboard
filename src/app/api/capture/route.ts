@@ -20,42 +20,65 @@ function extractJson(text: string) {
 }
 
 type Action = Record<string, unknown> & { type: string };
+type ActionResult = { message: string; undo?: Record<string, unknown> };
 
 async function executeAction(
   action: Action,
   supabase: Awaited<ReturnType<typeof createClient>>,
-): Promise<string> {
+): Promise<ActionResult> {
   switch (action.type) {
     case "create_task": {
       let domain_id = (action.domain_id as string) || null;
       if (!domain_id) domain_id = await getInboxDomainId(supabase);
-      await supabase.from("tasks").insert({
-        title: action.title,
-        domain_id,
-        project_id: (action.project_id as string) || null,
-        due_date: (action.due_date as string) || null,
-        due_time: (action.due_time as string) || null,
-        priority: (action.priority as string) || null,
-        source: "voice",
-      });
-      return `Added task "${action.title}"`;
+      const { data } = await supabase
+        .from("tasks")
+        .insert({
+          title: action.title,
+          domain_id,
+          project_id: (action.project_id as string) || null,
+          due_date: (action.due_date as string) || null,
+          due_time: (action.due_time as string) || null,
+          priority: (action.priority as string) || null,
+          source: "voice",
+        })
+        .select("id")
+        .single();
+      return {
+        message: `Added task "${action.title}"`,
+        undo: { type: "delete_task", id: data?.id },
+      };
     }
     case "complete_task": {
       await supabase
         .from("tasks")
         .update({ status: "completed", completed_at: new Date().toISOString() })
         .eq("id", action.task_id);
-      return "Marked task complete";
+      return {
+        message: "Marked task complete",
+        undo: { type: "reopen_task", id: action.task_id },
+      };
     }
     case "create_project": {
-      await supabase.from("projects").insert({
-        name: action.name,
-        domain_id: action.domain_id,
-        target_date: (action.target_date as string) || null,
-      });
-      return `Created project "${action.name}"`;
+      const { data } = await supabase
+        .from("projects")
+        .insert({
+          name: action.name,
+          domain_id: action.domain_id,
+          target_date: (action.target_date as string) || null,
+        })
+        .select("id")
+        .single();
+      return {
+        message: `Created project "${action.name}"`,
+        undo: { type: "delete_project", id: data?.id },
+      };
     }
     case "update_project_status": {
+      const { data: prior } = await supabase
+        .from("projects")
+        .select("status")
+        .eq("id", action.project_id)
+        .single();
       await supabase
         .from("projects")
         .update({
@@ -63,18 +86,37 @@ async function executeAction(
           completed_at: action.status === "completed" ? new Date().toISOString() : null,
         })
         .eq("id", action.project_id);
-      return `Updated project status to ${action.status}`;
+      return {
+        message: `Updated project status to ${action.status}`,
+        undo: {
+          type: "set_project_status",
+          id: action.project_id,
+          status: prior?.status ?? "active",
+        },
+      };
     }
     case "log_activity": {
-      await supabase.from("activity_log").insert({
-        project_id: action.project_id,
-        entry: action.entry,
-        hours_logged: (action.hours_logged as number) ?? null,
-        source: "voice",
-      });
-      return "Logged activity";
+      const { data } = await supabase
+        .from("activity_log")
+        .insert({
+          project_id: action.project_id,
+          entry: action.entry,
+          hours_logged: (action.hours_logged as number) ?? null,
+          source: "voice",
+        })
+        .select("id")
+        .single();
+      return {
+        message: "Logged activity",
+        undo: { type: "delete_activity_log", id: data?.id },
+      };
     }
     case "update_milestone": {
+      const { data: prior } = await supabase
+        .from("milestones")
+        .select("status")
+        .eq("id", action.milestone_id)
+        .single();
       await supabase
         .from("milestones")
         .update({
@@ -82,16 +124,27 @@ async function executeAction(
           completed_at: action.status === "done" ? new Date().toISOString() : null,
         })
         .eq("id", action.milestone_id);
-      return `Updated milestone to ${action.status}`;
+      return {
+        message: `Updated milestone to ${action.status}`,
+        undo: {
+          type: "set_milestone_status",
+          id: action.milestone_id,
+          status: prior?.status ?? "pending",
+        },
+      };
     }
     case "create_calendar_event": {
-      await supabase.from("calendar_events").insert({
-        title: action.title,
-        starts_at: action.start,
-        ends_at: action.end,
-        location: (action.location as string) || null,
-        source: "manual",
-      });
+      const { data } = await supabase
+        .from("calendar_events")
+        .insert({
+          title: action.title,
+          starts_at: action.start,
+          ends_at: action.end,
+          location: (action.location as string) || null,
+          source: "manual",
+        })
+        .select("id")
+        .single();
 
       const googleAuth = await getAuthenticatedClient();
       if (googleAuth) {
@@ -106,10 +159,13 @@ async function executeAction(
           },
         });
       }
-      return `Created calendar event "${action.title}"`;
+      return {
+        message: `Created calendar event "${action.title}"`,
+        undo: { type: "delete_calendar_event", id: data?.id },
+      };
     }
     default:
-      return `Unrecognized action: ${action.type}`;
+      return { message: `Unrecognized action: ${action.type}` };
   }
 }
 
@@ -184,7 +240,14 @@ export async function POST(request: NextRequest) {
   const results: string[] = [];
   for (const action of parsed.actions ?? []) {
     try {
-      results.push(await executeAction(action, supabase));
+      const { message, undo } = await executeAction(action, supabase);
+      results.push(message);
+      await supabase.from("notifications").insert({
+        type: action.type,
+        title: message,
+        body: transcript,
+        undo_payload: undo ?? null,
+      });
     } catch (err) {
       results.push(`Failed: ${action.type} (${err instanceof Error ? err.message : "error"})`);
     }

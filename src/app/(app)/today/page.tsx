@@ -60,6 +60,11 @@ export default async function TodayPage() {
   const topTasks = (dueTasks ?? []).slice(0, MAX_TOP_TASKS);
   const overflowCount = (dueTasks?.length ?? 0) - topTasks.length;
   const calendarConnected = await isCalendarConnected();
+  const { count: unreadCountRaw } = await supabase
+    .from("notifications")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "unread");
+  const unreadCount = unreadCountRaw ?? 0;
 
   return (
     <div className="p-6">
@@ -74,7 +79,17 @@ export default async function TodayPage() {
             })}
           </p>
         </div>
-        <SignOutButton />
+        <div className="flex items-center gap-3">
+          <Link href="/notifications" className="relative text-sm text-zinc-500 underline">
+            Notifications
+            {unreadCount > 0 && (
+              <span className="ml-1 rounded-full bg-red-500 px-1.5 py-0.5 text-xs text-white">
+                {unreadCount}
+              </span>
+            )}
+          </Link>
+          <SignOutButton />
+        </div>
       </div>
 
       <section className="mt-6">
