@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { SignOutButton } from "./sign-out-button";
+import { CalendarSyncButton } from "./calendar-sync-button";
 import { completeTask } from "../tasks/actions";
+import { isCalendarConnected } from "@/lib/google-calendar";
 
 const MAX_TOP_TASKS = 8;
 
@@ -57,6 +59,7 @@ export default async function TodayPage() {
 
   const topTasks = (dueTasks ?? []).slice(0, MAX_TOP_TASKS);
   const overflowCount = (dueTasks?.length ?? 0) - topTasks.length;
+  const calendarConnected = await isCalendarConnected();
 
   return (
     <div className="p-6">
@@ -75,7 +78,10 @@ export default async function TodayPage() {
       </div>
 
       <section className="mt-6">
-        <h2 className="text-sm font-medium text-zinc-500">Calendar</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium text-zinc-500">Calendar</h2>
+          <CalendarSyncButton connected={calendarConnected} />
+        </div>
         <div className="mt-2 space-y-2">
           {events?.map((e) => (
             <div key={e.id} className="rounded border p-3 text-sm">
