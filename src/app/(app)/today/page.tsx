@@ -25,7 +25,10 @@ export default async function TodayPage() {
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowStr = localISODate(tomorrow);
 
-  const [{ data: domains }, { data: dueTasks }, { data: events }] = await Promise.all([
+  const threeDaysAgo = new Date(now);
+  threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+
+  const [{ data: domains }, { data: dueTasks }, { data: events }, { data: journalEntries }] = await Promise.all([
     supabase.from("stewardship_domains").select("id, name").eq("active", true).order("name"),
     supabase
       .from("tasks")
@@ -40,7 +43,16 @@ export default async function TodayPage() {
       .gte("starts_at", `${todayStr}T00:00:00`)
       .lt("starts_at", `${tomorrowStr}T00:00:00`)
       .order("starts_at"),
+    supabase
+      .from("journal_entries")
+      .select("entry_date, transcription_text")
+      .eq("source", "obsidian")
+      .gte("entry_date", localISODate(threeDaysAgo))
+      .order("entry_date", { ascending: false })
+      .limit(1),
   ]);
+
+  const latestJournal = journalEntries?.[0] ?? null;
 
   // Domain status: open + overdue task counts, computed here rather than a
   // separate observations engine (that's a Phase 4 module).
@@ -184,6 +196,25 @@ export default async function TodayPage() {
           })}
         </div>
       </section>
+
+      {latestJournal && (
+        <section className="mt-6">
+          <h2 className="text-sm font-medium text-zinc-500">Daily log</h2>
+          <details className="mt-2 rounded border p-3 text-sm">
+            <summary className="cursor-pointer font-medium">
+              {new Date(`${latestJournal.entry_date}T12:00:00`).toLocaleDateString(undefined, {
+                weekday: "long",
+                month: "long",
+                day: "numeric",
+              })}
+              <span className="ml-2 text-xs font-normal text-zinc-400">from Obsidian</span>
+            </summary>
+            <pre className="mt-3 max-h-96 overflow-y-auto whitespace-pre-wrap font-sans text-xs text-zinc-600">
+              {latestJournal.transcription_text}
+            </pre>
+          </details>
+        </section>
+      )}
 
       <p className="mt-8 text-xs text-zinc-400">Signed in as {user?.email}</p>
     </div>
