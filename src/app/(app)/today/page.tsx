@@ -88,6 +88,9 @@ export default async function TodayPage() {
               </span>
             )}
           </Link>
+          <Link href="/settings" className="text-sm text-zinc-500 underline">
+            Settings
+          </Link>
           <SignOutButton />
         </div>
       </div>

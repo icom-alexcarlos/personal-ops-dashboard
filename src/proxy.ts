@@ -31,8 +31,11 @@ export async function proxy(request: NextRequest) {
 
   const isLoginPage = request.nextUrl.pathname.startsWith("/login");
   const isAuthCallback = request.nextUrl.pathname.startsWith("/api/auth");
+  // /api/capture does its own auth (session OR capture token) so mobile
+  // shortcuts without cookies aren't redirected to the login page.
+  const isCapture = request.nextUrl.pathname.startsWith("/api/capture");
 
-  if (!user && !isLoginPage && !isAuthCallback) {
+  if (!user && !isLoginPage && !isAuthCallback && !isCapture) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);

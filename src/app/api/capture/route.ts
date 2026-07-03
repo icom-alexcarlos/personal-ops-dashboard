@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { anthropic } from "@/lib/anthropic";
 import { buildSystemPrompt, type ParserContext } from "@/lib/voice-parser";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { validateCaptureToken } from "@/lib/capture-tokens";
 import { getAuthenticatedClient } from "@/lib/google-calendar";
 import { google } from "googleapis";
 
-async function getInboxDomainId(supabase: Awaited<ReturnType<typeof createClient>>) {
+async function getInboxDomainId(supabase: SupabaseClient) {
   const { data } = await supabase
     .from("stewardship_domains")
     .select("id")
@@ -24,7 +27,7 @@ type ActionResult = { message: string; undo?: Record<string, unknown> };
 
 async function executeAction(
   action: Action,
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: SupabaseClient,
 ): Promise<ActionResult> {
   switch (action.type) {
     case "create_task": {
@@ -175,7 +178,29 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Missing transcript" }, { status: 400 });
   }
 
-  const supabase = await createClient();
+  // Two auth paths: a capture token from a mobile shortcut, or the
+  // logged-in browser session for the in-app mic.
+  let supabase: SupabaseClient;
+  const authHeader = request.headers.get("authorization");
+  if (authHeader?.toLowerCase().startsWith("bearer ")) {
+    const result = await validateCaptureToken(authHeader.slice(7).trim());
+    if (!result.ok) {
+      return NextResponse.json(
+        { error: result.reason === "rate_limited" ? "Rate limit exceeded" : "Invalid token" },
+        { status: result.reason === "rate_limited" ? 429 : 401 },
+      );
+    }
+    supabase = createAdminClient();
+  } else {
+    const sessionClient = await createClient();
+    const {
+      data: { user },
+    } = await sessionClient.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+    supabase = sessionClient;
+  }
 
   const [{ data: domains }, { data: projects }, { data: openTasks }, { data: milestones }] =
     await Promise.all([
@@ -221,7 +246,11 @@ export async function POST(request: NextRequest) {
   }
 
   if (parsed.error) {
-    return NextResponse.json({ message: parsed.error, transcript });
+    return NextResponse.json({
+      message: parsed.error,
+      spoken_confirmation: parsed.error,
+      transcript,
+    });
   }
 
   if (parsed.needs_disambiguation) {
@@ -232,9 +261,8 @@ export async function POST(request: NextRequest) {
       candidates: parsed.candidates ?? [],
       status: "pending",
     });
-    return NextResponse.json({
-      message: parsed.question || "I wasn't sure what you meant -- saved for later review.",
-    });
+    const msg = parsed.question || "I wasn't sure what you meant -- saved for later review.";
+    return NextResponse.json({ message: msg, spoken_confirmation: msg });
   }
 
   const results: string[] = [];
@@ -253,5 +281,6 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({ message: results.join(". ") || "Nothing to do" });
+  const summary = results.join(". ") || "Nothing to do";
+  return NextResponse.json({ message: summary, spoken_confirmation: summary });
 }
