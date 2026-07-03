@@ -56,4 +56,17 @@ All commits pushed to GitHub.
 
 Not yet done (per SCOPE.md's own kickoff rules — use it for 3 days before Phase 2):
 - Upgrade Supabase to Pro before daily reliance
-- Pick real hosting and deploy (not needed for local use)
+
+## Deployment (2026-07-03)
+
+Deployed to Vercel Hobby (free): https://personal-ops-dashboard-9g6p.vercel.app
+(an earlier project, personal-ops-dashboard-xi, should be deleted in Vercel).
+Deploys auto-trigger on push to main. Env vars live in Vercel project settings.
+
+## Phase 2 Progress (2026-07-03)
+
+- Capture tokens: done. capture_tokens table (0003), bearer auth on
+  /api/capture, /settings page to generate/revoke, spoken_confirmation in
+  responses, verified end-to-end (token capture created a task with no session).
+- iOS Shortcuts: recipe handed to user, pointed at the Vercel URL.
+- Skipped per feature selection: email forwarding, Gmail watcher.
