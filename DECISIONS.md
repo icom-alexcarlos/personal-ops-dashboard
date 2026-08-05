@@ -70,3 +70,23 @@ Deploys auto-trigger on push to main. Env vars live in Vercel project settings.
   responses, verified end-to-end (token capture created a task with no session).
 - iOS Shortcuts: recipe handed to user, pointed at the Vercel URL.
 - Skipped per feature selection: email forwarding, Gmail watcher.
+
+## Robinhood Agentic — Planning (2026-08-05)
+
+Planning guide authored: ROBINHOOD_AGENTIC.md (companion to SCOPE.md, same
+phased/worksheet format). Robinhood MCP connector is attached to Claude and
+its tools verified visible in-session.
+
+Committed by the plan itself (not pending):
+- Human-in-the-loop at every phase; no autonomous order placement at any
+  level (no "L3"). Options and crypto orders out of scope; IRA excluded.
+- Rollout: Phase A read-only analyst -> B paper tickets -> C live with
+  per-order approval (gated on B stats + capital gate) -> D scheduled
+  read-only routines.
+
+Pending (Appendix A worksheet, fill before Phase C): scoped account, active
+trading capital, risk/size caps, PDT plan, stop-order policy, playbook
+location (in-repo vs local), phase start dates.
+
+Dashboard work deferred until after Phase B: 0005_trade_journal.sql,
+log_trade capture action, Today screen card (sketched in guide Section 10).
