@@ -5,8 +5,22 @@ import { buildSystemPrompt, type ParserContext } from "@/lib/voice-parser";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { validateCaptureToken } from "@/lib/capture-tokens";
+import { contentHash, findReceipt, saveReceipt } from "@/lib/capture-receipts";
+import { appendJournalSegment, resolveEntryDate, resolveEntryTime } from "@/lib/journal";
 import { getAuthenticatedClient } from "@/lib/google-calendar";
 import { google } from "googleapis";
+
+// Sources that carry their own provenance value through to created rows.
+// Everything else predates the source column widening and stays 'voice'.
+function rowSourceFor(captureSource: string) {
+  return captureSource === "drafts" ? "drafts" : "voice";
+}
+
+// Dictated captures come from the in-app mic and phone shortcuts; Drafts and
+// anything else that posts typed text gets the text-shaped parser prompt.
+function inputKindFor(captureSource: string): "speech" | "text" {
+  return captureSource === "drafts" ? "text" : "speech";
+}
 
 async function getInboxDomainId(supabase: SupabaseClient) {
   const { data } = await supabase
@@ -28,6 +42,7 @@ type ActionResult = { message: string; undo?: Record<string, unknown> };
 async function executeAction(
   action: Action,
   supabase: SupabaseClient,
+  captureSource: string,
 ): Promise<ActionResult> {
   switch (action.type) {
     case "create_task": {
@@ -37,12 +52,13 @@ async function executeAction(
         .from("tasks")
         .insert({
           title: action.title,
+          notes: (action.notes as string) || null,
           domain_id,
           project_id: (action.project_id as string) || null,
           due_date: (action.due_date as string) || null,
           due_time: (action.due_time as string) || null,
           priority: (action.priority as string) || null,
-          source: "voice",
+          source: rowSourceFor(captureSource),
         })
         .select("id")
         .single();
@@ -105,7 +121,7 @@ async function executeAction(
           project_id: action.project_id,
           entry: action.entry,
           hours_logged: (action.hours_logged as number) ?? null,
-          source: "voice",
+          source: rowSourceFor(captureSource),
         })
         .select("id")
         .single();
@@ -173,13 +189,29 @@ async function executeAction(
 }
 
 export async function POST(request: NextRequest) {
-  const { transcript, source } = await request.json();
-  if (!transcript || typeof transcript !== "string") {
-    return NextResponse.json({ error: "Missing transcript" }, { status: 400 });
+  let body: Record<string, unknown>;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Body must be JSON" }, { status: 400 });
   }
 
-  // Two auth paths: a capture token from a mobile shortcut, or the
-  // logged-in browser session for the in-app mic.
+  // "transcript" is what the iOS shortcut sends; "text" is the natural name
+  // for typed captures out of Drafts. Both mean the same thing here.
+  const text = (body.text ?? body.transcript) as unknown;
+  if (!text || typeof text !== "string" || !text.trim()) {
+    return NextResponse.json({ error: "Missing text" }, { status: 400 });
+  }
+
+  const source = typeof body.source === "string" ? body.source : "in_app";
+  const mode = body.mode === "journal" ? "journal" : "parse";
+  const externalId = typeof body.external_id === "string" ? body.external_id : null;
+  const tags = Array.isArray(body.tags)
+    ? body.tags.filter((t): t is string => typeof t === "string")
+    : [];
+
+  // Two auth paths: a capture token from a mobile shortcut or Drafts action,
+  // or the logged-in browser session for the in-app mic.
   let supabase: SupabaseClient;
   const authHeader = request.headers.get("authorization");
   if (authHeader?.toLowerCase().startsWith("bearer ")) {
@@ -202,6 +234,40 @@ export async function POST(request: NextRequest) {
     supabase = sessionClient;
   }
 
+  // Replay an identical re-send instead of doing the work twice. Only clients
+  // that identify the capture (Drafts sends the draft UUID) can opt in.
+  const hash = externalId ? contentHash(text, mode) : null;
+  if (externalId && hash) {
+    const prior = await findReceipt(supabase, source, externalId, hash);
+    if (prior) return NextResponse.json({ ...prior, deduplicated: true });
+  }
+
+  const respond = async (payload: Record<string, unknown>) => {
+    if (externalId && hash) await saveReceipt(supabase, source, externalId, hash, payload);
+    return NextResponse.json(payload);
+  };
+
+  if (mode === "journal") {
+    const entryDate = resolveEntryDate(body.entry_date);
+    const { appended } = await appendJournalSegment(supabase, {
+      source: rowSourceFor(source),
+      entryDate,
+      entryTime: resolveEntryTime(body.entry_time),
+      text,
+      tags: Array.from(new Set(["daily", source, ...tags])),
+    });
+
+    const message = `${appended ? "Appended to" : "Started"} the ${entryDate} daily log`;
+    await supabase.from("notifications").insert({
+      type: "journal_entry",
+      title: message,
+      body: text,
+      source_ref: externalId ? `${source}:${externalId}` : source,
+    });
+
+    return respond({ message, spoken_confirmation: message, entry_date: entryDate });
+  }
+
   const [{ data: domains }, { data: projects }, { data: openTasks }, { data: milestones }] =
     await Promise.all([
       supabase.from("stewardship_domains").select("id, name").eq("active", true),
@@ -217,14 +283,15 @@ export async function POST(request: NextRequest) {
     projects: projects ?? [],
     openTasks: openTasks ?? [],
     milestones: milestones ?? [],
-    source: source || "in_app",
+    source,
+    inputKind: inputKindFor(source),
   };
 
   const response = await anthropic.messages.create({
     model: "claude-sonnet-5",
     max_tokens: 1024,
     system: buildSystemPrompt(context),
-    messages: [{ role: "user", content: transcript }],
+    messages: [{ role: "user", content: text }],
   });
 
   const textBlock = response.content.find((b) => b.type === "text");
@@ -249,13 +316,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       message: parsed.error,
       spoken_confirmation: parsed.error,
-      transcript,
+      transcript: text,
     });
   }
 
+  // No receipt on the two inconclusive outcomes below: re-sending the draft
+  // should get another go at parsing rather than replaying "I wasn't sure".
   if (parsed.needs_disambiguation) {
     await supabase.from("pending_captures").insert({
-      raw_transcript: transcript,
+      raw_transcript: text,
       source: context.source,
       parsed_intent: parsed,
       candidates: parsed.candidates ?? [],
@@ -268,12 +337,13 @@ export async function POST(request: NextRequest) {
   const results: string[] = [];
   for (const action of parsed.actions ?? []) {
     try {
-      const { message, undo } = await executeAction(action, supabase);
+      const { message, undo } = await executeAction(action, supabase, source);
       results.push(message);
       await supabase.from("notifications").insert({
         type: action.type,
         title: message,
-        body: transcript,
+        body: text,
+        source_ref: externalId ? `${source}:${externalId}` : source,
         undo_payload: undo ?? null,
       });
     } catch (err) {
@@ -282,5 +352,5 @@ export async function POST(request: NextRequest) {
   }
 
   const summary = results.join(". ") || "Nothing to do";
-  return NextResponse.json({ message: summary, spoken_confirmation: summary });
+  return respond({ message: summary, spoken_confirmation: summary });
 }

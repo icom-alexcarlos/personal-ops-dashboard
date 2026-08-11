@@ -70,3 +70,33 @@ Deploys auto-trigger on push to main. Env vars live in Vercel project settings.
   responses, verified end-to-end (token capture created a task with no session).
 - iOS Shortcuts: recipe handed to user, pointed at the Vercel URL.
 - Skipped per feature selection: email forwarding, Gmail watcher.
+
+## Drafts App Integration (2026-08-11)
+
+Drafts connects through the existing `/api/capture` endpoint and capture
+tokens rather than getting its own endpoint — the token's "scoped to
+/api/capture only" promise stays true, and no proxy change was needed.
+
+- **Direction is one-way.** Drafts has no server API, so the dashboard can't
+  pull from it. Everything runs from a Drafts action that POSTs out.
+- **One action, tag-routed.** Untagged drafts go through the Claude parser like
+  voice; drafts tagged `journal` append to that day's `journal_entries` row
+  (source `drafts`). The Today screen's Daily log card now shows every source
+  that wrote on the most recent day, so the Drafts log sits beside the Obsidian
+  note instead of hiding it.
+- **Idempotence** (a stated design principle, and Drafts re-sends are common):
+  each request carries the draft UUID and a hash of the payload, recorded in
+  `capture_receipts`. An identical re-send replays the stored response and
+  writes nothing; an edited draft is treated as new input.
+- **Provenance:** migration 0005 widens the `source` check constraints so
+  Drafts-created rows record `drafts` instead of being laundered as `voice`.
+- **Local dates:** the action sends device-local `entry_date`/`entry_time`;
+  the server is UTC and would otherwise roll the daily log over in the evening.
+- **Parser:** now told whether input was dictated or typed, and `create_task`
+  gained a `notes` field so a multi-line draft keeps its detail (the `notes`
+  column already existed).
+
+Setup instructions live at Settings → Drafts (with the script and a copy
+button) and in `integrations/drafts/README.md`.
+
+**Requires running migration 0005 in Supabase before the first Drafts capture.**
