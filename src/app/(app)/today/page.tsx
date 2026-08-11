@@ -7,6 +7,11 @@ import { isCalendarConnected } from "@/lib/google-calendar";
 
 const MAX_TOP_TASKS = 8;
 
+const JOURNAL_SOURCE_LABELS: Record<string, string> = {
+  obsidian: "from Obsidian",
+  drafts: "from Drafts",
+};
+
 function localISODate(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
     d.getDate(),
@@ -45,14 +50,19 @@ export default async function TodayPage() {
       .order("starts_at"),
     supabase
       .from("journal_entries")
-      .select("entry_date, transcription_text")
-      .eq("source", "obsidian")
+      .select("entry_date, transcription_text, source")
+      .in("source", ["obsidian", "drafts"])
       .gte("entry_date", localISODate(threeDaysAgo))
       .order("entry_date", { ascending: false })
-      .limit(1),
+      .limit(10),
   ]);
 
-  const latestJournal = journalEntries?.[0] ?? null;
+  // The Obsidian note and the day's Drafts log are separate rows for the same
+  // day, so show every source that wrote on the most recent day with a log.
+  const latestJournalDate = journalEntries?.[0]?.entry_date ?? null;
+  const latestJournals = (journalEntries ?? []).filter(
+    (e) => e.entry_date === latestJournalDate,
+  );
 
   // Domain status: open + overdue task counts, computed here rather than a
   // separate observations engine (that's a Phase 4 module).
@@ -197,22 +207,28 @@ export default async function TodayPage() {
         </div>
       </section>
 
-      {latestJournal && (
+      {latestJournals.length > 0 && (
         <section className="mt-6">
           <h2 className="text-sm font-medium text-zinc-500">Daily log</h2>
-          <details className="mt-2 rounded border p-3 text-sm">
-            <summary className="cursor-pointer font-medium">
-              {new Date(`${latestJournal.entry_date}T12:00:00`).toLocaleDateString(undefined, {
-                weekday: "long",
-                month: "long",
-                day: "numeric",
-              })}
-              <span className="ml-2 text-xs font-normal text-zinc-400">from Obsidian</span>
-            </summary>
-            <pre className="mt-3 max-h-96 overflow-y-auto whitespace-pre-wrap font-sans text-xs text-zinc-600">
-              {latestJournal.transcription_text}
-            </pre>
-          </details>
+          <div className="mt-2 space-y-2">
+            {latestJournals.map((entry) => (
+              <details key={entry.source} className="rounded border p-3 text-sm">
+                <summary className="cursor-pointer font-medium">
+                  {new Date(`${entry.entry_date}T12:00:00`).toLocaleDateString(undefined, {
+                    weekday: "long",
+                    month: "long",
+                    day: "numeric",
+                  })}
+                  <span className="ml-2 text-xs font-normal text-zinc-400">
+                    {JOURNAL_SOURCE_LABELS[entry.source] ?? entry.source}
+                  </span>
+                </summary>
+                <pre className="mt-3 max-h-96 overflow-y-auto whitespace-pre-wrap font-sans text-xs text-zinc-600">
+                  {entry.transcription_text}
+                </pre>
+              </details>
+            ))}
+          </div>
         </section>
       )}
 
