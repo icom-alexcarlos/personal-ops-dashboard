@@ -90,3 +90,27 @@ location (in-repo vs local), phase start dates.
 
 Dashboard work deferred until after Phase B: 0005_trade_journal.sql,
 log_trade capture action, Today screen card (sketched in guide Section 10).
+
+## Reddit Strategy Plans (2026-09-01)
+
+Two r/Daytrading posts shared by Alex (as screenshots), planned as separate
+documents because they live at different layers:
+
+- TOP1_ROTATION.md — monthly Top-1 market-cap rotation (u/Jeblitzky).
+  Portfolio-layer plan; NOT day trading. Status: Phase 0 (verify the
+  backtest — the OP's own edit calls the data unreliable) before any
+  capital. If ever adopted, it becomes a new capped experimental sleeve;
+  it must not touch the Sleeve B DCA core (violates its concentration and
+  no-timing doctrine). As of 2026-08-31 the rule's position would be NVDA
+  ($5.43T, ~15% ahead of AAPL).
+- playbook/highest-volume-day.md — small-cap premarket-volume breakout
+  (u/1215DayTrading), codified in the ROBINHOOD_AGENTIC.md Section 5
+  playbook format. Status: STUDY. Runs through the same Phase A -> B -> C
+  gauntlet; claimed stats treated as unverified. RS/RW stays Sleeve A's
+  primary strategy until paper stats + an explicit decision say otherwise.
+
+Both inherit ROBINHOOD_AGENTIC.md guardrails wholesale (propose-then-
+approve, limit orders, risk caps, journaling, no autonomous execution).
+Pending decisions live in each document's worksheet. Installing either into
+the Notion Trading & Portfolio Framework is Alex's explicit step, not done
+here.
