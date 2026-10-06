@@ -53,9 +53,25 @@ click. Without that, a video source is a summary you have to trust.
   labelled as the uploader's words — never merged into synthesis.
 - **No captions.** Local Whisper transcription is the fallback; it needs the audio, which
   needs the same network access the transcript did.
-- **Network policy.** Cloud sessions at the default **Trusted** access level cannot reach
-  `www.youtube.com` at all. See [the pending source](../sources/2026-08-10-youtube-v4bxMPJ0UiQ.md)
-  for the exact failure and the fix.
+- **Two different network walls, often confused.** They fail at different layers and only
+  one is a setting:
+  - *Environment egress policy.* The session's own proxy refuses the host — `403` on
+    CONNECT, before any request reaches YouTube. Fixed by raising the environment's
+    network access to **Custom** and allowing `youtube.com`, `*.youtube.com`,
+    `*.googlevideo.com`, `*.ytimg.com`, `youtubei.googleapis.com`.
+  - *Provider bot detection.* CONNECT succeeds and Google refuses the content anyway:
+    the watch page redirects to `/sorry/index`, `api/timedtext` returns `429`, and the
+    innertube API answers `LOGIN_REQUIRED — "Sign in to confirm you're not a bot"`. No
+    setting fixes this; it is the datacenter IP's reputation.
+- **No JavaScript runtime → every media download 403s.** yt-dlp needs one (`deno`) to sign
+  media URLs. Captions arrive by a different path and can still succeed, so a session goes
+  half-mined — transcript yes, frames no — without the failure being obvious. Always
+  confirm the `.mp4` exists and is non-empty before running the frame extractor.
+- **Player client matters.** The `web` client draws the bot check first; `visionos` gets
+  through where `web` does not (`--extractor-args "youtube:player_client=visionos"`).
+
+See [the source page](../sources/2026-10-06-possible-top-in-place-today.md) for a worked
+example of all four hitting the same video.
 
 ## See also
 

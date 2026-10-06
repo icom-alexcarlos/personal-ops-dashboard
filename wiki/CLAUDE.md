@@ -101,9 +101,11 @@ the source page, the ripple step was skipped.
 
 ### Ingesting a video
 
-Videos come in through the [video-lens](https://github.com/kar2phi/video-lens) skill,
-which fetches a YouTube transcript and renders an HTML report — summary, takeaway, key
-points, timestamped outline.
+Two routes. Pick by what carries the meaning, not by which is easier.
+
+**Route A — transcript report.** For talking-head and spoken-argument video, where the
+words are the content. The [kar2phi/video-lens](https://github.com/kar2phi/video-lens)
+skill renders an HTML report; `ingest_video.py` parses it.
 
 ```bash
 /video-lens <youtube-url>            # writes ~/Downloads/video-lens/reports/<name>.html
@@ -112,25 +114,44 @@ python3 wiki/scripts/ingest_video.py wiki/raw/videos/<name>.html
 ```
 
 `ingest_video.py` reads the report's embedded `video-lens-meta` JSON block and the
-rendered sections, and writes a `sources/` page with frontmatter, summary, takeaway,
-key points, and a timestamped outline where every entry deep-links back into the video
-at its exact second. It prints the path it wrote and a reminder of what still needs
-doing by hand.
+rendered sections, and writes a `sources/` page with frontmatter, summary, takeaway, key
+points, and a timestamped outline where every entry deep-links back into the video at its
+exact second. It prints the path it wrote and a reminder of what still needs doing by hand.
 
-**The script only does step 4.** Steps 5–7 — the ripple, the index, the log — are
-judgment work and stay with you. Read the generated page, then ask what in `concepts/`
-and `entities/` it changes.
+**Route B — frames.** For anything narrated *over a picture*: charts, dashboards, screen
+recordings, slides. The `video-lens` frames skill pulls stills so the on-screen detail can
+actually be read.
+
+```bash
+scripts/fetch_video.sh transcript "<URL>" NAME     # NAME.en.vtt
+scripts/fetch_video.sh video      "<URL>" NAME     # NAME.mp4 (video-only)
+python3 scripts/video_lens.py scenes NAME.mp4      # find annotation moments mechanically
+python3 scripts/video_lens.py frames NAME.mp4 --timestamps "1:47,2:19" -o ./stills
+```
+
+Keep the `.mp4`, the `.vtt` and the stills together under `raw/videos/<video_id>/`. They
+are primary evidence, so they belong in the immutable layer. Then write the `sources/`
+page by hand in the same shape Route A produces — `ingest_video.py` does **not** apply
+here; it parses an HTML report, not an `.mp4`.
+
+Route B's rule: **frames are evidence, the transcript is only the index telling you which
+frames to pull.** When the speaker says "the 21", the chart is what proves it is the 21
+EMA. Record what a still actually shows, never what the commentary implies it shows.
+
+**The scripts only do step 4.** Steps 5–7 — the ripple, the index, the log — are judgment
+work and stay with you. Read the generated page, then ask what in `concepts/` and
+`entities/` it changes.
 
 Timestamp links are the reason video sources are worth ingesting at all: a claim in a
-concept page can cite `…&t=1847` and land the reader on the sentence that supports it.
+concept page can cite `…&t=1847` and land the reader on the second that supports it.
 
-**Environment note.** In a cloud session, `www.youtube.com` must be reachable. The
-default **Trusted** network access level does not include it — the environment needs
-**Custom** network access with `youtube.com`, `*.youtube.com`, `*.googlevideo.com`,
-`*.ytimg.com`, and `youtubei.googleapis.com` allowed. Without that, `fetch_transcript.py`
-and `yt-dlp` both fail with `Tunnel connection failed: 403 Forbidden`, and the Whisper
-fallback fails too because it downloads audio from the same host. Running video-lens on
-a local machine sidesteps this entirely.
+**Environment note.** Reaching YouTube from a cloud session takes more than one setting,
+and the walls are easy to confuse — see
+[video ingestion](concepts/video-ingestion.md#failure-modes-specific-to-video) for all
+four, and [the PATsTrading source page](sources/2026-10-06-possible-top-in-place-today.md)
+for a worked example of hitting them in order. Short version: allow the hosts, install
+`deno`, pin `player_client=visionos`, and expect media to 403 anyway on a datacenter IP.
+Running the fetch on a local machine sidesteps all of it.
 
 ---
 

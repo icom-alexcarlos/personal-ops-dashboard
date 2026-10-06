@@ -5,7 +5,7 @@ kind: person
 tags: [llm, ai]
 sources:
   - sources/2026-08-10-karpathy-llm-wiki-gist.md
-updated: 2026-08-10
+updated: 2026-10-06
 ---
 
 # Andrej Karpathy
@@ -26,8 +26,10 @@ background knowledge, not ingested material, and should not be cited from here.
   built on. Core argument: the binding constraint on knowledge bases is bookkeeping, not
   comprehension, and that is delegable.
 
-## Open threads
+## Resolved
 
-- [YouTube v4bxMPJ0UiQ](../sources/2026-08-10-youtube-v4bxMPJ0UiQ.md) — pending; requested
-  alongside the llm-wiki material but never fetched, so its topic and even its speaker are
-  unconfirmed. Do not assume it is his.
+- YouTube `v4bxMPJ0UiQ`, requested alongside the llm-wiki material, is **not his**. It is
+  [Possible Top In Place Today - Episode 080526](../sources/2026-10-06-possible-top-in-place-today.md)
+  by [PATsTrading](patstrading.md) — confirmed 2026-10-06 against YouTube's
+  oEmbed endpoint. The earlier instruction not to assume the video was his stands
+  vindicated; nothing from it attaches to this page.
